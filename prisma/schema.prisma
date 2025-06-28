@@ -2,8 +2,11 @@
 // 每次修改后，运行 `npx prisma migrate dev` 来同步数据库结构
 
 datasource db {
-  provider = "postgresql" // 数据库类型
-  url      = env("DATABASE_URL") // 从环境变量读取连接字符串
+  provider  = "postgresql" // 数据库类型
+  // 应用运行时使用的连接 URL (通过连接池)
+  url       = env("DATABASE_URL") 
+  // Prisma Migrate 等管理任务使用的直连 URL
+  directUrl = env("DATABASE_URL_UNPOOLED") 
 }
 
 generator client {
