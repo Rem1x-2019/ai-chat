@@ -1,55 +1,55 @@
-// Prisma Êı¾İ¿âÄ£ĞÍ¶¨ÒåÎÄ¼ş
-// Ã¿´ÎĞŞ¸Äºó£¬ÔËĞĞ `npx prisma migrate dev` À´Í¬²½Êı¾İ¿â½á¹¹
+// Prisma æ•°æ®åº“æ¨¡å‹å®šä¹‰æ–‡ä»¶
+// æ¯æ¬¡ä¿®æ”¹åï¼Œè¿è¡Œ `npx prisma migrate dev` æ¥åŒæ­¥æ•°æ®åº“ç»“æ„
 
 datasource db {
-  provider  = "postgresql" // Êı¾İ¿âÀàĞÍ
-  // Ó¦ÓÃÔËĞĞÊ±Ê¹ÓÃµÄÁ¬½Ó URL (Í¨¹ıÁ¬½Ó³Ø)
+  provider  = "postgresql" // æ•°æ®åº“ç±»å‹
+  // åº”ç”¨è¿è¡Œæ—¶ä½¿ç”¨çš„è¿æ¥ URL (é€šè¿‡è¿æ¥æ± )
   url       = env("DATABASE_URL") 
-  // Prisma Migrate µÈ¹ÜÀíÈÎÎñÊ¹ÓÃµÄÖ±Á¬ URL
+  // Prisma Migrate ç­‰ç®¡ç†ä»»åŠ¡ä½¿ç”¨çš„ç›´è¿ URL
   directUrl = env("DATABASE_URL_UNPOOLED") 
 }
 
 generator client {
-  provider = "prisma-client-js" // Éú³É Prisma Client
+  provider = "prisma-client-js" // ç”Ÿæˆ Prisma Client
 }
 
-// ÓÃ»§Ä£ĞÍ
+// ç”¨æˆ·æ¨¡å‹
 model User {
-  id        String    @id @default(cuid()) // ÓÃ»§ID£¬Ö÷¼ü
-  isGuest   Boolean   @default(false)      // ÊÇ·ñÎªÓÎ¿Í
-  createdAt DateTime  @default(now())      // ´´½¨Ê±¼ä
-  sessions  Session[] // Ò»¸öÓÃ»§¿ÉÒÔÓĞ¶à¸ö»á»°
-  limits    UserLimit[] // ÓÃ»§µÄÃ¿ÈÕÏŞÖÆ¼ÇÂ¼
+  id        String    @id @default(cuid()) // ç”¨æˆ·IDï¼Œä¸»é”®
+  isGuest   Boolean   @default(false)      // æ˜¯å¦ä¸ºæ¸¸å®¢
+  createdAt DateTime  @default(now())      // åˆ›å»ºæ—¶é—´
+  sessions  Session[] // ä¸€ä¸ªç”¨æˆ·å¯ä»¥æœ‰å¤šä¸ªä¼šè¯
+  limits    UserLimit[] // ç”¨æˆ·çš„æ¯æ—¥é™åˆ¶è®°å½•
 }
 
-// »á»°Ä£ĞÍ
+// ä¼šè¯æ¨¡å‹
 model Session {
-  id        String    @id @default(cuid()) // »á»°ID£¬Ö÷¼ü
-  title     String                        // »á»°±êÌâ
-  userId    String                        // ¹ØÁªµÄÓÃ»§ID
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade) // ¹ØÁªµ½ User Ä£ĞÍ£¬É¾³ıÓÃ»§Ê±¼¶ÁªÉ¾³ıÆä»á»°
-  messages  Message[] // Ò»¸ö»á»°°üº¬¶àÌõÏûÏ¢
-  createdAt DateTime  @default(now())      // ´´½¨Ê±¼ä
-  updatedAt DateTime  @updatedAt          // ¸üĞÂÊ±¼ä
+  id        String    @id @default(cuid()) // ä¼šè¯IDï¼Œä¸»é”®
+  title     String                        // ä¼šè¯æ ‡é¢˜
+  userId    String                        // å…³è”çš„ç”¨æˆ·ID
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade) // å…³è”åˆ° User æ¨¡å‹ï¼Œåˆ é™¤ç”¨æˆ·æ—¶çº§è”åˆ é™¤å…¶ä¼šè¯
+  messages  Message[] // ä¸€ä¸ªä¼šè¯åŒ…å«å¤šæ¡æ¶ˆæ¯
+  createdAt DateTime  @default(now())      // åˆ›å»ºæ—¶é—´
+  updatedAt DateTime  @updatedAt          // æ›´æ–°æ—¶é—´
 }
 
-// ÏûÏ¢Ä£ĞÍ
+// æ¶ˆæ¯æ¨¡å‹
 model Message {
-  id        String   @id @default(cuid()) // ÏûÏ¢ID£¬Ö÷¼ü
-  role      String   // ½ÇÉ«: "user" »ò "assistant"
-  content   String   @db.Text             // ÏûÏ¢ÄÚÈİ£¬Ê¹ÓÃ Text ÀàĞÍÒÔÖ§³Ö³¤ÎÄ±¾
-  sessionId String                        // ¹ØÁªµÄ»á»°ID
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade) // ¹ØÁªµ½ Session Ä£ĞÍ£¬É¾³ı»á»°Ê±¼¶ÁªÉ¾³ıÆäÏûÏ¢
-  createdAt DateTime @default(now())      // ´´½¨Ê±¼ä
+  id        String   @id @default(cuid()) // æ¶ˆæ¯IDï¼Œä¸»é”®
+  role      String   // è§’è‰²: "user" æˆ– "assistant"
+  content   String   @db.Text             // æ¶ˆæ¯å†…å®¹ï¼Œä½¿ç”¨ Text ç±»å‹ä»¥æ”¯æŒé•¿æ–‡æœ¬
+  sessionId String                        // å…³è”çš„ä¼šè¯ID
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade) // å…³è”åˆ° Session æ¨¡å‹ï¼Œåˆ é™¤ä¼šè¯æ—¶çº§è”åˆ é™¤å…¶æ¶ˆæ¯
+  createdAt DateTime @default(now())      // åˆ›å»ºæ—¶é—´
 }
 
-// ÓÃ»§Ã¿ÈÕÏŞÖÆÄ£ĞÍ
+// ç”¨æˆ·æ¯æ—¥é™åˆ¶æ¨¡å‹
 model UserLimit {
   userId String
-  date   DateTime @db.Date // Ö»¼ÇÂ¼ÈÕÆÚ£¬²»¼ÇÂ¼Ê±¼ä
-  count  Int      @default(0) // µ±ÈÕÒÑ·¢ËÍÏûÏ¢Êı
-  limit  Int      @default(10) // µ±ÈÕÏûÏ¢×Ü¶î¶È
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade) // ¹ØÁªµ½ User Ä£ĞÍ
+  date   DateTime @db.Date // åªè®°å½•æ—¥æœŸï¼Œä¸è®°å½•æ—¶é—´
+  count  Int      @default(0) // å½“æ—¥å·²å‘é€æ¶ˆæ¯æ•°
+  limit  Int      @default(10) // å½“æ—¥æ¶ˆæ¯æ€»é¢åº¦
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade) // å…³è”åˆ° User æ¨¡å‹
 
-  @@id([userId, date]) // Ê¹ÓÃÓÃ»§IDºÍÈÕÆÚ×÷Îª¸´ºÏÖ÷¼ü
+  @@id([userId, date]) // ä½¿ç”¨ç”¨æˆ·IDå’Œæ—¥æœŸä½œä¸ºå¤åˆä¸»é”®
 }
