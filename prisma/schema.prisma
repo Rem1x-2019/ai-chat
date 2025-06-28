@@ -1,0 +1,52 @@
+// Prisma 数据库模型定义文件
+// 每次修改后，运行 `npx prisma migrate dev` 来同步数据库结构
+
+datasource db {
+  provider = "postgresql" // 数据库类型
+  url      = env("DATABASE_URL") // 从环境变量读取连接字符串
+}
+
+generator client {
+  provider = "prisma-client-js" // 生成 Prisma Client
+}
+
+// 用户模型
+model User {
+  id        String    @id @default(cuid()) // 用户ID，主键
+  isGuest   Boolean   @default(false)      // 是否为游客
+  createdAt DateTime  @default(now())      // 创建时间
+  sessions  Session[] // 一个用户可以有多个会话
+  limits    UserLimit[] // 用户的每日限制记录
+}
+
+// 会话模型
+model Session {
+  id        String    @id @default(cuid()) // 会话ID，主键
+  title     String                        // 会话标题
+  userId    String                        // 关联的用户ID
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade) // 关联到 User 模型，删除用户时级联删除其会话
+  messages  Message[] // 一个会话包含多条消息
+  createdAt DateTime  @default(now())      // 创建时间
+  updatedAt DateTime  @updatedAt          // 更新时间
+}
+
+// 消息模型
+model Message {
+  id        String   @id @default(cuid()) // 消息ID，主键
+  role      String   // 角色: "user" 或 "assistant"
+  content   String   @db.Text             // 消息内容，使用 Text 类型以支持长文本
+  sessionId String                        // 关联的会话ID
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade) // 关联到 Session 模型，删除会话时级联删除其消息
+  createdAt DateTime @default(now())      // 创建时间
+}
+
+// 用户每日限制模型
+model UserLimit {
+  userId String
+  date   DateTime @db.Date // 只记录日期，不记录时间
+  count  Int      @default(0) // 当日已发送消息数
+  limit  Int      @default(10) // 当日消息总额度
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade) // 关联到 User 模型
+
+  @@id([userId, date]) // 使用用户ID和日期作为复合主键
+}

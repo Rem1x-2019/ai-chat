@@ -1,0 +1,12 @@
+{
+  "env": {
+    "DATABASE_URL": "postgresql://user:pass@host/db",
+    "OPENAI_API_KEY": "sk-...",
+    "DEEPSEEK_API_KEY": "...",
+    "NEXTAUTH_SECRET": "any-random-string",
+    "NEXTAUTH_URL": "https://your-vercel-project.vercel.app",
+    "GITHUB_ID": "your-client-id",
+    "GITHUB_SECRET": "your-client-secret",
+    "DEFAULT_DAILY_LIMIT": "10"
+  }
+}
