@@ -1,4 +1,4 @@
-import "./styles/globals.css"; // <-- ÕâÊÇÕýÈ·µÄÎ»ÖÃ
+import "./styles/globals.css"; // <-- è¿™æ˜¯æ­£ç¡®çš„ä½ç½®
 import { ReactNode } from "react";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
