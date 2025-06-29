@@ -4,18 +4,25 @@
 import { prisma } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
 
+// 定义一个统一的表单状态类型
+export type FormState = {
+  message: string;
+  error: boolean;
+};
+
 // --- System Config ---
+// ... getSystemConfig, setSystemConfig 保持不变 ...
 export async function getSystemConfig(key: string) {
-  const config = await prisma.systemConfig.findUnique({ where: { key } });
-  return config?.value || null;
+    const config = await prisma.systemConfig.findUnique({ where: { key } });
+    return config?.value || null;
 }
 export async function setSystemConfig(key: string, value: string) {
-  await prisma.systemConfig.upsert({
-    where: { key },
-    update: { value },
-    create: { key, value },
-  });
-  revalidatePath('/admin');
+    await prisma.systemConfig.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value },
+    });
+    revalidatePath('/admin');
 }
 
 // --- API Service Management ---
@@ -23,7 +30,8 @@ export async function getApiServices() {
   return await prisma.apiService.findMany({ orderBy: { name: 'asc' } });
 }
 
-export async function upsertApiService(prevState: { message: string | null }, formData: FormData) {
+// 修改函数签名以匹配 useFormState 的要求
+export async function upsertApiService(prevState: FormState, formData: FormData): Promise<FormState> {
   const id = formData.get('id') as string;
   const dataToUpdate = {
     apiKey: formData.get('apiKey') as string,
@@ -32,19 +40,19 @@ export async function upsertApiService(prevState: { message: string | null }, fo
   };
 
   if (!dataToUpdate.apiKey) {
-    return { message: null, error: "API Key 不能为空。" };
+    return { message: "API Key 不能为空。", error: true };
   }
   
   try {
     if (id) {
       await prisma.apiService.update({ where: { id }, data: dataToUpdate });
       revalidatePath('/admin');
-      return { message: '更新成功！', error: null };
+      return { message: '更新成功！', error: false };
     }
     // 创建逻辑可以后续添加
-    return { message: null, error: "不支持创建新服务。" };
+    return { message: "不支持创建新服务。", error: true };
   } catch (error) {
-    return { message: null, error: '更新失败，请查看服务器日志。' };
+    return { message: '更新失败，请查看服务器日志。', error: true };
   }
 }
 
@@ -59,14 +67,17 @@ export async function updateUserLimit(userId: string, newLimit: number) {
   revalidatePath('/admin');
 }
 
-// 新增：删除用户的服务器操作
-export async function deleteUser(userId: string) {
+// 修改函数签名以匹配 useFormState 的要求
+export async function deleteUser(prevState: FormState, formData: FormData): Promise<FormState> {
+  const userId = formData.get('userId') as string;
   try {
-    // 可以在此添加逻辑，防止删除关键管理员
+    if (!userId) {
+      return { message: '缺少用户 ID。', error: true };
+    }
     await prisma.user.delete({ where: { id: userId } });
     revalidatePath('/admin');
-    return { message: `用户 ${userId} 已删除。` };
+    return { message: `用户 ${userId} 已删除。`, error: false };
   } catch (error) {
-    return { message: '删除用户失败，请查看服务器日志。' };
+    return { message: '删除用户失败。', error: true };
   }
 }

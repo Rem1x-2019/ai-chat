@@ -2,19 +2,17 @@
 'use client';
 
 import { useFormState, useFormStatus } from 'react-dom';
-import { upsertApiService, updateUserLimit, deleteUser } from './actions';
+import { upsertApiService, updateUserLimit, deleteUser, FormState } from './actions';
 import { useEffect } from 'react';
 
-// 通用的提交按钮，可以显示 pending 状态
+// 通用的提交按钮
 function SubmitButton({ children, variant = 'primary' }: { children: React.ReactNode, variant?: 'primary' | 'danger' }) {
   const { pending } = useFormStatus();
-  
   const baseClasses = "px-3 py-1 text-white text-sm rounded-md transition-colors";
   const variantClasses = {
     primary: "bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300",
     danger: "bg-red-600 hover:bg-red-700 disabled:bg-red-300"
   };
-
   return (
     <button type="submit" disabled={pending} className={`${baseClasses} ${variantClasses[variant]}`}>
       {pending ? '处理中...' : children}
@@ -24,12 +22,14 @@ function SubmitButton({ children, variant = 'primary' }: { children: React.React
 
 // API 服务管理表单
 export function ApiServiceForm({ service }: { service: any }) {
-  // useFormState 用于处理表单提交后的状态（如成功/错误消息）
-  const [state, formAction] = useFormState(upsertApiService, { message: null, error: null });
+  const initialState: FormState = { message: '', error: false };
+  const [state, formAction] = useFormState(upsertApiService, initialState);
 
   useEffect(() => {
-    if (state.message) alert(state.message);
-    if (state.error) alert(`错误: ${state.error}`);
+    // 只有当 message 不为空时才 alert
+    if (state.message) {
+      alert(state.message);
+    }
   }, [state]);
 
   return (
@@ -55,6 +55,15 @@ export function ApiServiceForm({ service }: { service: any }) {
 
 // 用户管理列表项
 export function UserForm({ user }: { user: any }) {
+  const initialState: FormState = { message: '', error: false };
+  const [deleteState, deleteAction] = useFormState(deleteUser, initialState);
+
+  useEffect(() => {
+    if (deleteState.message) {
+      alert(deleteState.message);
+    }
+  }, [deleteState]);
+  
   return (
     <div className="flex items-center justify-between p-2 border-b">
       <div>
@@ -62,7 +71,6 @@ export function UserForm({ user }: { user: any }) {
         <p className="text-xs text-slate-500">{user.id}</p>
       </div>
       
-      {/* 更新用户额度的表单 */}
       <form action={async (formData) => {
         const newLimit = parseInt(formData.get('limit') as string, 10);
         await updateUserLimit(user.id, newLimit);
@@ -72,13 +80,9 @@ export function UserForm({ user }: { user: any }) {
         <SubmitButton>保存</SubmitButton>
       </form>
 
-      {/* 删除用户的表单 */}
-      <form action={async () => {
-        if (window.confirm(`确定要删除用户 ${user.id} 吗？此操作不可撤销。`)) {
-            const result = await deleteUser(user.id);
-            alert(result.message);
-        }
-      }}>
+      {/* 删除用户的表单，现在也使用 useFormState */}
+      <form action={deleteAction}>
+        <input type="hidden" name="userId" value={user.id} />
         <SubmitButton variant="danger">删除</SubmitButton>
       </form>
     </div>
