@@ -17,6 +17,8 @@ type ChatWindowProps = {
 export default function ChatWindow({ sessionId }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // 新增状态：用于存储用户选择的模型
+  const [selectedModel, setSelectedModel] = useState('default'); 
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +50,6 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
 
     if (!text || isLoading || !inputRef.current) return;
 
-    // 检查这是否是会话中的第一条用户消息
     const isFirstUserMessage = messages.filter(m => m.role === 'user').length === 0;
 
     const userInput = inputRef.current.value;
@@ -58,14 +59,21 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
     setMessages(prev => [...prev, tempUserMessage]);
     setIsLoading(true);
 
+    // --- 修改：构造一个可变的请求体 ---
+    const requestBody: any = {
+      messages: [...messages.map(m => ({ role: m.role, content: m.content })), { role: 'user', content: userInput }],
+      sessionId,
+    };
+    // 只有当用户选择了非默认模型时，才在请求中附带 provider
+    if (selectedModel !== 'default') {
+      requestBody.provider = selectedModel;
+    }
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...messages.map(m => ({ role: m.role, content: m.content })), { role: 'user', content: userInput }],
-          sessionId,
-        }),
+        body: JSON.stringify(requestBody), // 使用构造好的请求体
       });
 
       if (!res.ok) {
@@ -81,12 +89,9 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
           return [...newMessages, { ...tempUserMessage, id: `user-${Date.now()}` }, assistantMessage];
       });
 
-      // 如果是第一条用户消息，则在获取回复后，触发自动命名
       if (isFirstUserMessage) {
-        // "即发即忘" 请求，不阻塞主流程
-        // TODO: 为了让侧边栏标题实时更新，需要一个全局状态管理方案或回调
-        fetch(`/api/sessions/${sessionId}`, {
-          method: 'PATCH',
+        fetch(`/api/sessions/${sessionId}/rename`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ firstMessage: text }),
         });
@@ -95,7 +100,7 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
     } catch (error) {
       const errorMessageContent = error instanceof Error ? error.message : 'Unknown error';
       const errorMessage: Message = { id: `error-${Date.now()}`, role: 'assistant', content: `错误: ${errorMessageContent}` };
-      setMessages(prev => [...prev.slice(0, -1), errorMessage]); // 替换临时消息为错误消息
+      setMessages(prev => [...prev.slice(0, -1), errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -110,6 +115,19 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
 
   return (
     <div className="flex flex-col h-full">
+      {/* 新增：模型选择器 */}
+      <div className="p-2 border-b border-slate-200/80">
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
+          className="text-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+        >
+          <option value="default">默认模型</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+
       <div className="flex-1 space-y-4 overflow-y-auto mb-4 p-4">
         {messages.map((msg) => (
           <MessageBubble key={msg.id} role={msg.role} content={msg.content} />

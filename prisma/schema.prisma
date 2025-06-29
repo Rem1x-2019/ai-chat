@@ -53,3 +53,9 @@ model UserLimit {
 
   @@id([userId, date]) // 使用用户ID和日期作为复合主键
 }
+// 新增：系统配置模型
+model SystemConfig {
+  id    String @id @default(cuid()) // 配置项的唯一ID
+  key   String @unique             // 配置键，例如 "default_model"
+  value String                     // 配置值，例如 "deepseek"
+}

@@ -1,3 +1,5 @@
+// 文件路径: src/app/api/chat/route.ts
+
 import { chatWithOpenAI } from "@/lib/openai";
 import { chatWithDeepSeek } from "@/lib/deepseek";
 import { getServerSession } from "next-auth";
@@ -39,8 +41,16 @@ export async function POST(req: Request) {
     return new Response("您已达到每日消息上限。", { status: 429 });
   }
 
+  // --- 新增逻辑：从数据库获取默认模型设置 ---
+  const defaultConfig = await prisma.systemConfig.findUnique({
+    where: { key: 'default_model' },
+  });
+  // 如果数据库没设置，则默认为 'deepseek'
+  const defaultModel = defaultConfig?.value || 'deepseek'; 
+  
   const body = await req.json();
-  const { messages, provider = "openai", sessionId } = body;
+  // --- 修改：如果前端未提供 provider，则使用从数据库读取的 defaultModel ---
+  const { messages, provider = defaultModel, sessionId } = body;
 
   if (!sessionId) {
     return new Response("会话 ID 是必需的", { status: 400 });
