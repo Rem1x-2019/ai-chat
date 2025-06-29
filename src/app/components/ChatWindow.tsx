@@ -5,28 +5,27 @@ import { useChat } from 'ai/react';
 import { useEffect, useState, useRef, FormEvent } from 'react';
 import MessageBubble from './MessageBubble';
 import type { Message } from 'ai/react';
+import { useSessionStore } from '@/stores/sessionStore'; // 引入 Zustand store
 
 type ChatWindowProps = {
   sessionId: string;
-  onTitleUpdate: (sessionId: string, newTitle: string) => void; // 接收回调函数
 };
 
-export default function ChatWindow({ sessionId, onTitleUpdate }: ChatWindowProps) {
+export default function ChatWindow({ sessionId }: ChatWindowProps) {
+  // 从 store 中获取更新标题的 action
+  const updateSessionTitle = useSessionStore((state) => state.updateSessionTitle);
+  
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
   const [selectedModel, setSelectedModel] = useState('default');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 获取历史消息
   useEffect(() => {
     const fetchMessages = async () => {
       setIsLoadingInitial(true);
       try {
         const res = await fetch(`/api/messages?sessionId=${sessionId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setInitialMessages(data);
-        }
+        if (res.ok) setInitialMessages(await res.json());
       } catch (error) {
         console.error("获取历史消息失败:", error);
       } finally {
@@ -38,44 +37,46 @@ export default function ChatWindow({ sessionId, onTitleUpdate }: ChatWindowProps
 
   const { messages, input, handleInputChange, handleSubmit: originalHandleSubmit, isLoading } = useChat({
     api: '/api/chat',
-    body: { sessionId, provider: selectedModel },
+    body: { sessionId },
     initialMessages: initialMessages,
   });
 
-  // 自动滚动
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
   
-  // 封装我们自己的 handleSubmit
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-      e.preventDefault();
-      if (!input || isLoading) return;
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!input || isLoading) return;
 
-      const userMessageContent = input;
-      // 检查这是否是会话中的第一条用户消息
-      const isFirstUserMessage = messages.filter(m => m.role === 'user').length === 0;
-      
-      // 使用 useChat 的 handleSubmit 来处理消息发送和流式更新
-      originalHandleSubmit(e);
+    const userMessageContent = input;
+    // 使用 useChat 返回的 messages 状态来判断是否是第一条用户消息
+    const isFirstUserMessage = messages.filter(m => m.role === 'user').length === 0;
+    
+    // 使用 useChat 的 handleSubmit 发送消息，并附带 provider 信息
+    originalHandleSubmit(e, {
+      options: { body: { provider: selectedModel } }
+    });
 
-      // 在消息发送后（不等待回复），立即检查是否需要自动命名
-      if (isFirstUserMessage) {
-        try {
-          const res = await fetch(`/api/sessions/${sessionId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ firstMessage: userMessageContent }),
-          });
-          if (res.ok) {
-            const updatedSession = await res.json();
-            // 调用父组件的回调函数，更新侧边栏的标题
-            onTitleUpdate(sessionId, updatedSession.title);
-          }
-        } catch (error) {
-          console.error("自动命名失败:", error);
+    if (isFirstUserMessage) {
+      // 这是一个“即发即忘”的请求，不 await 它，以免阻塞 UI
+      fetch(`/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstMessage: userMessageContent }),
+      })
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('自动命名失败');
+      })
+      .then(updatedSession => {
+        if (updatedSession.title) {
+          // 成功后，调用 store 的 action 更新全局状态
+          updateSessionTitle(sessionId, updatedSession.title);
         }
-      }
+      })
+      .catch(error => console.error(error));
+    }
   }
 
   if (isLoadingInitial) {
@@ -98,9 +99,8 @@ export default function ChatWindow({ sessionId, onTitleUpdate }: ChatWindowProps
 
       <div className="flex-1 space-y-4 overflow-y-auto mb-4 p-4">
         {messages.map((m) => (
-          <MessageBubble key={m.id} role={m.role as any} content={m.content} />
+          <MessageBubble key={m.id} role={m.role as 'user' | 'assistant'} content={m.content} />
         ))}
-        <div ref={messagesEndRef} />
       </div>
       
       <form onSubmit={handleSubmit} className="mt-auto flex p-2 border-t border-slate-200/80">

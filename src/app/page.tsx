@@ -6,15 +6,20 @@ import ChatWindow from './components/ChatWindow';
 import SessionList from './components/SessionList';
 import SessionCreateForm from './components/SessionCreateForm';
 import UserMenu from './components/UserMenu';
-
-interface Session {
-  id: string;
-  title: string;
-}
+import { useSessionStore } from '@/stores/sessionStore'; // 引入 Zustand store
 
 export default function Home() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // 从全局 store 获取状态和操作函数
+  const { 
+    sessions, 
+    activeSessionId, 
+    setSessions, 
+    addSession,
+    deleteSession,
+    updateSessionTitle,
+    setActiveSessionId 
+  } = useSessionStore();
+
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -28,22 +33,24 @@ export default function Home() {
         body: JSON.stringify({ title: "新对话" }),
       });
       if (!res.ok) throw new Error("创建新会话失败");
-      const newSession: Session = await res.json();
-      setSessions(prevSessions => [newSession, ...prevSessions]);
-      setActiveSessionId(newSession.id);
+      const newSession = await res.json();
+      addSession(newSession); // 使用 store 的 action
+      setActiveSessionId(newSession.id); // 使用 store 的 action
     } catch (error) {
       console.error("创建会话时出错:", error);
     } finally {
       setIsCreating(false);
     }
-  }, [isCreating]);
+  }, [isCreating, addSession, setActiveSessionId]);
 
   const handleDeleteSession = async (sessionIdToDelete: string) => {
-    const updatedSessions = sessions.filter(s => s.id !== sessionIdToDelete);
-    setSessions(updatedSessions);
+    const originalSessions = sessions;
+    deleteSession(sessionIdToDelete); // 使用 store 的 action
+
     if (activeSessionId === sessionIdToDelete) {
-      if (updatedSessions.length > 0) {
-        setActiveSessionId(updatedSessions[0].id);
+      const remainingSessions = originalSessions.filter(s => s.id !== sessionIdToDelete);
+      if (remainingSessions.length > 0) {
+        setActiveSessionId(remainingSessions[0].id);
       } else {
         await handleCreateNewSession();
       }
@@ -52,91 +59,67 @@ export default function Home() {
       await fetch(`/api/sessions/${sessionIdToDelete}`, { method: 'DELETE' });
     } catch (error) {
       console.error("后台删除会话失败:", error);
+      setSessions(originalSessions); // 如果失败，恢复状态
     }
   };
-
-  const fetchSessions = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/sessions');
-      if (!res.ok) throw new Error('获取会话列表失败');
-      const existingSessions: Session[] = await res.json();
-      if (existingSessions.length > 0) {
-        setSessions(existingSessions);
-        setActiveSessionId(prev => prev ?? existingSessions[0].id);
-      } else {
-        await handleCreateNewSession();
-      }
-    } catch (error) {
-      console.error("初始化页面失败:", error);
-      if (sessions.length === 0) {
-        await handleCreateNewSession();
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [handleCreateNewSession, sessions.length]);
 
   useEffect(() => {
-    fetchSessions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  
-  // 新增：一个用于更新单个会话标题的回调函数
-  const handleUpdateSessionTitle = (sessionId: string, newTitle: string) => {
-    setSessions(currentSessions => 
-      currentSessions.map(session => 
-        session.id === sessionId ? { ...session, title: newTitle } : session
-      )
-    );
-  };
+    const loadInitialData = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch('/api/sessions');
+        if (!res.ok) throw new Error('获取会话列表失败');
+        const existingSessions = await res.json();
+        if (existingSessions.length > 0) {
+          setSessions(existingSessions);
+          if (useSessionStore.getState().activeSessionId === null) {
+            setActiveSessionId(existingSessions[0].id);
+          }
+        } else {
+          await handleCreateNewSession();
+        }
+      } catch (error) {
+        console.error("初始化页面失败:", error);
+        if (useSessionStore.getState().sessions.length === 0) {
+          await handleCreateNewSession();
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadInitialData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 仅在挂载时运行
 
   const activeSessionTitle = sessions.find(s => s.id === activeSessionId)?.title || "聊天";
 
   return (
     <main className="bg-slate-100 min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-5xl h-[95vh] flex bg-white rounded-2xl shadow-xl border border-slate-200/80 overflow-hidden">
-        
         <aside className="w-72 border-r border-slate-200/80 p-4 flex-col hidden md:flex bg-slate-50/50">
-          <SessionCreateForm 
-            onCreate={handleCreateNewSession} 
-            isCreating={isCreating} 
-          />
+          <SessionCreateForm onCreate={handleCreateNewSession} isCreating={isCreating} />
           <SessionList
             sessions={sessions}
             activeSessionId={activeSessionId}
-            onSelectSession={setActiveSessionId}
+            onSelectSession={setActiveSessionId} // 直接使用 store 的 action
             onDeleteSession={handleDeleteSession}
           />
         </aside>
-        
         <section className="flex-1 flex flex-col">
           <header className="flex items-center justify-between p-4 border-b border-slate-200/80">
-            <h1 className="text-lg font-semibold text-slate-800 truncate pr-4">
-              {activeSessionTitle}
-            </h1>
+            <h1 className="text-lg font-semibold text-slate-800 truncate pr-4">{activeSessionTitle}</h1>
             <UserMenu />
           </header>
-
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
-              <div className="flex items-center justify-center h-full text-slate-500">
-                正在初始化...
-              </div>
+              <div className="flex items-center justify-center h-full text-slate-500">正在初始化...</div>
             ) : activeSessionId ? (
-              <ChatWindow 
-                key={activeSessionId} 
-                sessionId={activeSessionId}
-                onTitleUpdate={handleUpdateSessionTitle} // 将回调函数传递下去
-              />
+              <ChatWindow key={activeSessionId} sessionId={activeSessionId} />
             ) : (
-              <div className="flex items-center justify-center h-full text-slate-500">
-                无法加载或创建会话。
-              </div>
+              <div className="flex items-center justify-center h-full text-slate-500">无法加载或创建会话。</div>
             )}
           </div>
         </section>
-
       </div>
     </main>
   );
