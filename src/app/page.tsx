@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import ChatWindow from './components/ChatWindow';
 import SessionList from './components/SessionList';
 import SessionCreateForm from './components/SessionCreateForm';
-import UserMenu from './components/UserMenu'; // 引入 UserMenu
+import UserMenu from './components/UserMenu';
 
 interface Session {
   id: string;
@@ -38,7 +38,35 @@ export default function Home() {
     }
   }, [isCreating]);
 
-  // 使用 useCallback 包装 fetchSessions 以便在 useEffect 中稳定引用
+  // 新增：处理会话删除的函数
+  const handleDeleteSession = async (sessionIdToDelete: string) => {
+    // 乐观更新：立即从前端状态中移除会话，以获得即时反馈
+    const updatedSessions = sessions.filter(s => s.id !== sessionIdToDelete);
+    setSessions(updatedSessions);
+
+    // 如果删除的是当前正激活的会话，则需要决定下一个激活哪个
+    if (activeSessionId === sessionIdToDelete) {
+      if (updatedSessions.length > 0) {
+        // 如果还有其他会话，则激活列表中的第一个
+        setActiveSessionId(updatedSessions[0].id);
+      } else {
+        // 如果这是最后一个会话，则创建一个新的
+        await handleCreateNewSession();
+      }
+    }
+
+    // 在后台发送 API 请求以在数据库中实际删除
+    try {
+      await fetch(`/api/sessions/${sessionIdToDelete}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error("后台删除会话失败:", error);
+      // 可选：如果后端删除失败，可以在此恢复前端状态并提示用户
+      // fetchSessions(); // 例如，重新获取一次列表以同步状态
+    }
+  };
+
   const fetchSessions = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -47,14 +75,12 @@ export default function Home() {
       const existingSessions: Session[] = await res.json();
       if (existingSessions.length > 0) {
         setSessions(existingSessions);
-        // 只有在当前没有激活的 session 时才设置，防止覆盖用户手动选择
         setActiveSessionId(prev => prev ?? existingSessions[0].id);
       } else {
         await handleCreateNewSession();
       }
     } catch (error) {
       console.error("初始化页面失败:", error);
-      // 只有在当前列表为空时才尝试创建，避免重复
       if (sessions.length === 0) {
         await handleCreateNewSession();
       }
@@ -67,7 +93,7 @@ export default function Home() {
   useEffect(() => {
     fetchSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // effect 仅在挂载时运行
+  }, []);
 
   const activeSessionTitle = sessions.find(s => s.id === activeSessionId)?.title || "聊天";
 
@@ -84,6 +110,7 @@ export default function Home() {
             sessions={sessions}
             activeSessionId={activeSessionId}
             onSelectSession={setActiveSessionId}
+            onDeleteSession={handleDeleteSession} // 将删除函数传递给子组件
           />
         </aside>
         

@@ -85,8 +85,8 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
       if (isFirstUserMessage) {
         // "即发即忘" 请求，不阻塞主流程
         // TODO: 为了让侧边栏标题实时更新，需要一个全局状态管理方案或回调
-        fetch(`/api/sessions/${sessionId}/rename`, {
-          method: 'POST',
+        fetch(`/api/sessions/${sessionId}`, {
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ firstMessage: text }),
         });
