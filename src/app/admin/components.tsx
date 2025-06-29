@@ -26,10 +26,7 @@ export function ApiServiceForm({ service }: { service: any }) {
   const [state, formAction] = useFormState(upsertApiService, initialState);
 
   useEffect(() => {
-    // 只有当 message 不为空时才 alert
-    if (state.message) {
-      alert(state.message);
-    }
+    if (state.message) alert(state.message);
   }, [state]);
 
   return (
@@ -59,32 +56,40 @@ export function UserForm({ user }: { user: any }) {
   const [deleteState, deleteAction] = useFormState(deleteUser, initialState);
 
   useEffect(() => {
-    if (deleteState.message) {
-      alert(deleteState.message);
-    }
+    if (deleteState.message) alert(deleteState.message);
   }, [deleteState]);
   
   return (
+    // 使用 justify-between 将子元素推到两端
     <div className="flex items-center justify-between p-2 border-b">
-      <div>
-        <p className="font-semibold truncate w-40" title={user.name || user.email || user.id}>{user.name || user.email || '游客'}</p>
-        <p className="text-xs text-slate-500">{user.id}</p>
+      {/* 左侧信息部分：设置了宽度和截断 */}
+      <div className="flex-shrink-0 w-1/3 mr-4">
+        <p className="font-semibold truncate" title={user.name || user.email || user.id}>
+          {user.name || user.email || '游客'}
+        </p>
+        <p className="text-xs text-slate-500 truncate" title={user.id}>
+          {user.id}
+        </p>
       </div>
       
-      <form action={async (formData) => {
-        const newLimit = parseInt(formData.get('limit') as string, 10);
-        await updateUserLimit(user.id, newLimit);
-        alert(`用户 ${user.id} 的额度已更新。`);
-      }} className="flex items-center space-x-2">
-        <input name="limit" type="number" defaultValue={user.messageLimit} className="w-16 p-1 border rounded text-center" />
-        <SubmitButton>保存</SubmitButton>
-      </form>
+      {/* 右侧操作部分，包含两个表单 */}
+      <div className="flex items-center space-x-4">
+        {/* 更新用户额度的表单 */}
+        <form action={async (formData) => {
+          const newLimit = parseInt(formData.get('limit') as string, 10);
+          await updateUserLimit(user.id, newLimit);
+          alert(`用户 ${user.id} 的额度已更新。`);
+        }} className="flex items-center space-x-2">
+          <input name="limit" type="number" defaultValue={user.messageLimit} className="w-20 p-1 border rounded text-center" />
+          <SubmitButton>保存</SubmitButton>
+        </form>
 
-      {/* 删除用户的表单，现在也使用 useFormState */}
-      <form action={deleteAction}>
-        <input type="hidden" name="userId" value={user.id} />
-        <SubmitButton variant="danger">删除</SubmitButton>
-      </form>
+        {/* 删除用户的表单 */}
+        <form action={deleteAction}>
+          <input type="hidden" name="userId" value={user.id} />
+          <SubmitButton variant="danger">删除</SubmitButton>
+        </form>
+      </div>
     </div>
   );
 }

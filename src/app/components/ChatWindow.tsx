@@ -1,16 +1,17 @@
 // 文件路径: src/app/components/ChatWindow.tsx
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import MessageBubble from './MessageBubble';
 import { useChat } from 'ai/react';
+import { useEffect, useState, useRef, FormEvent } from 'react';
+import MessageBubble from './MessageBubble';
 import type { Message } from 'ai/react';
 
 type ChatWindowProps = {
   sessionId: string;
+  onTitleUpdate: (sessionId: string, newTitle: string) => void; // 接收回调函数
 };
 
-export default function ChatWindow({ sessionId }: ChatWindowProps) {
+export default function ChatWindow({ sessionId, onTitleUpdate }: ChatWindowProps) {
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
   const [selectedModel, setSelectedModel] = useState('default');
@@ -35,7 +36,7 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
     fetchMessages();
   }, [sessionId]);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+  const { messages, input, handleInputChange, handleSubmit: originalHandleSubmit, isLoading } = useChat({
     api: '/api/chat',
     body: { sessionId, provider: selectedModel },
     initialMessages: initialMessages,
@@ -45,9 +46,40 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+  
+  // 封装我们自己的 handleSubmit
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!input || isLoading) return;
+
+      const userMessageContent = input;
+      // 检查这是否是会话中的第一条用户消息
+      const isFirstUserMessage = messages.filter(m => m.role === 'user').length === 0;
+      
+      // 使用 useChat 的 handleSubmit 来处理消息发送和流式更新
+      originalHandleSubmit(e);
+
+      // 在消息发送后（不等待回复），立即检查是否需要自动命名
+      if (isFirstUserMessage) {
+        try {
+          const res = await fetch(`/api/sessions/${sessionId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ firstMessage: userMessageContent }),
+          });
+          if (res.ok) {
+            const updatedSession = await res.json();
+            // 调用父组件的回调函数，更新侧边栏的标题
+            onTitleUpdate(sessionId, updatedSession.title);
+          }
+        } catch (error) {
+          console.error("自动命名失败:", error);
+        }
+      }
+  }
 
   if (isLoadingInitial) {
-    return <div className="flex items-center justify-center h-full">加载历史消息...</div>;
+    return <div className="flex items-center justify-center h-full text-slate-500">加载历史消息...</div>;
   }
 
   return (
@@ -66,7 +98,7 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
 
       <div className="flex-1 space-y-4 overflow-y-auto mb-4 p-4">
         {messages.map((m) => (
-          <MessageBubble key={m.id} role={m.role as 'user' | 'assistant'} content={m.content} />
+          <MessageBubble key={m.id} role={m.role as any} content={m.content} />
         ))}
         <div ref={messagesEndRef} />
       </div>
