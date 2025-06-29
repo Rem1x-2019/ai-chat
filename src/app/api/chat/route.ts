@@ -1,12 +1,13 @@
 // 文件路径: src/app/api/chat/route.ts
 
-import { chatWithOpenAI } from "@/lib/openai";
-import { chatWithDeepSeek } from "@/lib/deepseek";
+// 移除了 chatWithOpenAI 和 chatWithDeepSeek 的直接导入
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/authOptions";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { checkLimit } from "@/lib/limit"; // 引入每日限制检查函数
+import { checkLimit } from "@/lib/limit";
+// 引入新的通用函数，我们将把它放在 deepseek.ts 文件中
+import { chatWithProvider } from "@/lib/deepseek"; 
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -19,15 +20,14 @@ export async function POST(req: Request) {
   if (!userId) {
     let guestId = cookieStore.get("guest_id")?.value;
     if (!guestId) {
-      // 如果 Cookie 中没有游客 ID，则创建一个新的
       guestId = crypto.randomUUID();
-      cookieStore.set("guest_id", guestId, { maxAge: 60 * 60 * 24 * 30 }); // 设置 30 天有效期
+      cookieStore.set("guest_id", guestId, { maxAge: 60 * 60 * 24 * 30 });
     }
-    userId = `guest-${guestId}`; // 游客 ID 加上前缀以作区分
+    userId = `guest-${guestId}`;
     isGuest = true;
   }
 
-  // 确保数据库中有该用户（无论是登录用户还是游客）的记录
+  // 确保数据库中有该用户记录
   await prisma.user.upsert({
     where: { id: userId },
     update: {},
@@ -37,28 +37,25 @@ export async function POST(req: Request) {
   // 检查用户的每日消息限制
   const limitOk = await checkLimit(userId);
   if (!limitOk) {
-    // 如果超出限制，返回 429 Too Many Requests 错误
     return new Response("您已达到每日消息上限。", { status: 429 });
   }
 
-  // --- 新增逻辑：从数据库获取默认模型设置 ---
+  // 从数据库获取默认模型设置
   const defaultConfig = await prisma.systemConfig.findUnique({
     where: { key: 'default_model' },
   });
-  // 如果数据库没设置，则默认为 'deepseek'
-  const defaultModel = defaultConfig?.value || 'deepseek'; 
-  
+  const defaultModel = defaultConfig?.value || 'deepseek';
+
   const body = await req.json();
-  // --- 修改：如果前端未提供 provider，则使用从数据库读取的 defaultModel ---
+  // 如果前端没有提供 provider，则使用从数据库读取的默认值
   const { messages, provider = defaultModel, sessionId } = body;
 
   if (!sessionId) {
     return new Response("会话 ID 是必需的", { status: 400 });
   }
 
-  // 从消息数组中获取最后一条，即用户刚刚发送的消息
+  // 保存用户消息
   const userMessage = messages[messages.length - 1];
-  // 将用户的消息存入数据库
   await prisma.message.create({
     data: {
       sessionId,
@@ -67,20 +64,18 @@ export async function POST(req: Request) {
     }
   });
 
-  // 调用 AI 服务获取回复
+  // 调用AI服务获取回复
   let replyContent: string;
   try {
-    if (provider === "deepseek") {
-      replyContent = await chatWithDeepSeek(messages);
-    } else {
-      replyContent = await chatWithOpenAI(messages);
-    }
+    // 【核心修改】现在统一使用 chatWithProvider 函数
+    replyContent = await chatWithProvider(provider, messages);
   } catch (error) {
     console.error("AI API Error:", error);
-    return new Response("从 AI 服务获取响应失败。", { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "从 AI 服务获取响应失败。";
+    return new Response(errorMessage, { status: 500 });
   }
 
-  // 将 AI 的回复存入数据库
+  // 保存AI回复
   await prisma.message.create({
     data: {
       sessionId,
@@ -89,7 +84,7 @@ export async function POST(req: Request) {
     }
   });
 
-  // 将 AI 回复返回给前端
+  // 返回响应
   return new Response(JSON.stringify({ reply: replyContent }), {
     headers: { "Content-Type": "application/json" },
   });

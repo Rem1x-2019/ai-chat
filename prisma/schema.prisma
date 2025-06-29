@@ -1,61 +1,79 @@
-// Prisma 数据库模型定义文件
-// 每次修改后，运行 `npx prisma migrate dev` 来同步数据库结构
+// 文件路径: prisma/schema.prisma
 
 datasource db {
-  provider  = "postgresql" // 数据库类型
-  // 应用运行时使用的连接 URL (通过连接池)
-  url       = env("DATABASE_URL") 
-  // Prisma Migrate 等管理任务使用的直连 URL
-  directUrl = env("DATABASE_URL_UNPOOLED") 
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 generator client {
-  provider = "prisma-client-js" // 生成 Prisma Client
+  provider = "prisma-client-js"
+}
+
+// 新增：API 服务配置模型
+model ApiService {
+  id      String @id @default(cuid())
+  name    String @unique // 服务名称，例如 "openai", "deepseek"
+  apiKey  String @db.Text
+  baseUrl String? @db.Text // 例如 "https://api.deepseek.com/v1"
+  model   String? // 模型名称，例如 "deepseek-chat"
+  
+  // 用于统计使用次数
+  usageCount Int @default(0)
 }
 
 // 用户模型
 model User {
-  id        String    @id @default(cuid()) // 用户ID，主键
-  isGuest   Boolean   @default(false)      // 是否为游客
-  createdAt DateTime  @default(now())      // 创建时间
-  sessions  Session[] // 一个用户可以有多个会话
-  limits    UserLimit[] // 用户的每日限制记录
+  id           String    @id @default(cuid())
+  email        String?   @unique // 用于登录用户
+  name         String?
+  image        String?
+  isGuest      Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+  limits       UserLimit[]
+  
+  // 新增：用户的消息额度限制，默认为 20
+  messageLimit Int @default(20)
 }
 
 // 会话模型
 model Session {
-  id        String    @id @default(cuid()) // 会话ID，主键
-  title     String                        // 会话标题
-  userId    String                        // 关联的用户ID
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade) // 关联到 User 模型，删除用户时级联删除其会话
-  messages  Message[] // 一个会话包含多条消息
-  createdAt DateTime  @default(now())      // 创建时间
-  updatedAt DateTime  @updatedAt          // 更新时间
+  id        String    @id @default(cuid())
+  title     String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 // 消息模型
 model Message {
-  id        String   @id @default(cuid()) // 消息ID，主键
-  role      String   // 角色: "user" 或 "assistant"
-  content   String   @db.Text             // 消息内容，使用 Text 类型以支持长文本
-  sessionId String                        // 关联的会话ID
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade) // 关联到 Session 模型，删除会话时级联删除其消息
-  createdAt DateTime @default(now())      // 创建时间
+  id        String   @id @default(cuid())
+  role      String
+  content   String   @db.Text
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 }
 
 // 用户每日限制模型
 model UserLimit {
   userId String
-  date   DateTime @db.Date // 只记录日期，不记录时间
-  count  Int      @default(0) // 当日已发送消息数
-  limit  Int      @default(10) // 当日消息总额度
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade) // 关联到 User 模型
-
-  @@id([userId, date]) // 使用用户ID和日期作为复合主键
+  date   DateTime @db.Date
+  count  Int      @default(0)
+  
+  // `limit` 字段已被移除，将使用 User.messageLimit
+  
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, date])
 }
-// 新增：系统配置模型
+
+
+// 系统配置模型
 model SystemConfig {
-  id    String @id @default(cuid()) // 配置项的唯一ID
-  key   String @unique             // 配置键，例如 "default_model"
-  value String                     // 配置值，例如 "deepseek"
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
 }

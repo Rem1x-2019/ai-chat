@@ -1,55 +1,61 @@
-// 定义消息对象的接口
+// 文件路径: aichat/src/lib/deepseek.ts (现在变成通用的了)
+import { prisma } from "./db";
+
 export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
 }
 
 /**
- * 使用指定的托管服务（如华为云ModelArts）与DeepSeek模型进行聊天。
+ * 通用的、兼容 OpenAI 接口的聊天函数
+ * @param providerName "deepseek" 或 "openai"
  * @param messages 聊天消息数组
- * @returns AI模型的回复文本
+ * @returns AI 模型的回复文本
  */
-export async function chatWithDeepSeek(messages: Message[]): Promise<string> {
-  // 从环境变量中获取您的特定API URL和模型名称
-  const apiUrl = process.env.DEEPSEEK_API_URL;
-  const modelName = process.env.DEEPSEEK_MODEL_NAME;
+export async function chatWithProvider(providerName: string, messages: Message[]): Promise<string> {
+  // 1. 从数据库获取 API 服务配置
+  const service = await prisma.apiService.findUnique({
+    where: { name: providerName },
+  });
 
-  // 校验必要的环境变量是否已配置
-  if (!apiUrl || !modelName) {
-    throw new Error("请在 .env 文件中配置 DEEPSEEK_API_URL 和 DEEPSEEK_MODEL_NAME");
+  if (!service || !service.apiKey) {
+    throw new Error(`API service "${providerName}" is not configured in the database.`);
   }
 
-  // 发送 POST 请求到您的 API 地址
+  // 2. 更新使用次数统计 (原子操作)
+  await prisma.apiService.update({
+    where: { name: providerName },
+    data: { usageCount: { increment: 1 } },
+  });
+
+  // 3. 构造请求
+  const apiUrl = service.baseUrl || (providerName === 'openai' ? 'https://api.openai.com/v1/chat/completions' : '');
+  if (!apiUrl) {
+    throw new Error(`Base URL for "${providerName}" is not configured.`);
+  }
+
+  const model = service.model || (providerName === 'openai' ? 'gpt-4' : 'deepseek-chat');
+
   const res = await fetch(apiUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      // 使用环境变量中的 API Key 进行认证
-      "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+      "Authorization": `Bearer ${service.apiKey}`,
     },
     body: JSON.stringify({
-      // 指定您要使用的模型名称
-      "model": modelName,
-      // 传入完整的消息历史
-      "messages": messages,
-      // 设置温度参数以控制随机性
-      "temperature": 0.6,
-      // 明确设置 stream 为 false，因为我们的应用后端目前处理的是一次性响应
-      "stream": false
+      model: model,
+      messages: messages,
+      temperature: 0.6,
+      stream: false
     }),
   });
 
-  // 检查响应状态码
   if (!res.ok) {
     const errorBody = await res.text();
-    console.error("DeepSeek (ModelArts) API Error:", errorBody);
-    throw new Error(`DeepSeek (ModelArts) API 请求失败，状态码: ${res.status}`);
+    console.error(`${providerName} API Error:`, errorBody);
+    throw new Error(`${providerName} API request failed with status ${res.status}`);
   }
 
-  // 解析返回的 JSON 数据
   const data = await res.json();
-
-  // 从标准 OpenAI 兼容的响应结构中提取回复内容
-  // 假设 ModelArts 的返回格式与 OpenAI 一致
-  return data.choices[0]?.message?.content ?? "AI 未提供有效回复。";
+  return data.choices[0]?.message?.content ?? "AI did not provide a valid response.";
 }
