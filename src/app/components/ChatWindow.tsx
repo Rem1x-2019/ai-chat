@@ -1,5 +1,4 @@
 // 文件路径: src/app/components/ChatWindow.tsx
-
 'use client';
 
 import { useEffect, useRef, useState, FormEvent, KeyboardEvent } from 'react';
@@ -49,6 +48,9 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
 
     if (!text || isLoading || !inputRef.current) return;
 
+    // 检查这是否是会话中的第一条用户消息
+    const isFirstUserMessage = messages.filter(m => m.role === 'user').length === 0;
+
     const userInput = inputRef.current.value;
     inputRef.current.value = '';
 
@@ -63,7 +65,6 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
         body: JSON.stringify({
           messages: [...messages.map(m => ({ role: m.role, content: m.content })), { role: 'user', content: userInput }],
           sessionId,
-          provider: "deepseek" // <--- 关键修改在这里！
         }),
       });
 
@@ -79,6 +80,17 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
           const newMessages = prev.filter(m => m.id !== tempUserMessage.id);
           return [...newMessages, { ...tempUserMessage, id: `user-${Date.now()}` }, assistantMessage];
       });
+
+      // 如果是第一条用户消息，则在获取回复后，触发自动命名
+      if (isFirstUserMessage) {
+        // "即发即忘" 请求，不阻塞主流程
+        // TODO: 为了让侧边栏标题实时更新，需要一个全局状态管理方案或回调
+        fetch(`/api/sessions/${sessionId}/rename`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firstMessage: text }),
+        });
+      }
 
     } catch (error) {
       const errorMessageContent = error instanceof Error ? error.message : 'Unknown error';
@@ -97,7 +109,7 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
   };
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col h-full">
       <div className="flex-1 space-y-4 overflow-y-auto mb-4 p-4">
         {messages.map((msg) => (
           <MessageBubble key={msg.id} role={msg.role} content={msg.content} />
@@ -105,7 +117,7 @@ export default function ChatWindow({ sessionId }: ChatWindowProps) {
         {isLoading && <MessageBubble role="assistant" content="正在思考中..." />}
         <div ref={messagesEndRef} />
       </div>
-      <form onSubmit={handleSubmit} className="mt-auto flex p-2 border-t">
+      <form onSubmit={handleSubmit} className="mt-auto flex p-2 border-t border-slate-200/80">
         <input
           ref={inputRef}
           type="text"
